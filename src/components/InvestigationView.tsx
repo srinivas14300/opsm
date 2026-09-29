@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Incident, IncidentStatus, RecommendedAction } from '../types/incident';
+import { Incident, IncidentStatus, RecommendedAction, RootCauseHypothesis, EvidenceItem } from '../types/incident';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,6 +24,8 @@ import {
   Check,
   Zap,
   Brain,
+  ShieldCheck,
+  Eye,
 } from 'lucide-react';
 import { ResolutionModal } from './ResolutionModal';
 import { playActionBeep, playAlertChime, playSuccessChime } from '../utils/audio';
@@ -41,13 +43,18 @@ export const InvestigationView: React.FC = () => {
     currentUser,
     setViewHistoricalModalIncident,
     setSelectedIncidentId,
+    confirmHypothesis,
   } = useApp();
 
   const [dangerousModalAction, setDangerousModalAction] = useState<RecommendedAction | null>(null);
   const [resolutionModalOpen, setResolutionModalOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [isSendingChat, setIsSendingChat] = useState(false);
-  const [activeConsoleTab, setActiveConsoleTab] = useState<'actions' | 'logs' | 'playbook'>('actions');
+  const [activeConsoleTab, setActiveConsoleTab] = useState<'actions' | 'hypotheses' | 'evidence' | 'logs'>('actions');
+  
+  // State for confirming hypotheses
+  const [confirmingHypothesisId, setConfirmingHypothesisId] = useState<string | null>(null);
+  const [engineerNote, setEngineerNote] = useState('');
 
   const incident = incidents.find((i) => i.id === selectedIncidentId) || incidents[0];
 
@@ -114,7 +121,17 @@ export const InvestigationView: React.FC = () => {
     setIsSendingChat(false);
   };
 
+  const handleConfirmHypothesisSubmit = async (hypId: string) => {
+    if (!engineerNote.trim()) return;
+    playSuccessChime();
+    await confirmHypothesis(incident.id, hypId, engineerNote.trim());
+    setConfirmingHypothesisId(null);
+    setEngineerNote('');
+  };
+
   const currentMessages = chatMessages[incident.id] || [];
+  const hypotheses = incident.hypotheses || [];
+  const evidenceList = incident.evidence || [];
 
   return (
     <div className="space-y-5">
@@ -172,13 +189,7 @@ export const InvestigationView: React.FC = () => {
               return (
                 <div
                   key={step.key}
-                  onClick={() => {
-                    if (currentUser.role === 'admin' || currentUser.role === 'support') {
-                      updateIncidentStatus(incident.id, step.key);
-                      playActionBeep();
-                    }
-                  }}
-                  className={`p-2 rounded-lg border text-xs transition-all cursor-pointer ${
+                  className={`p-2 rounded-lg border text-xs transition-all ${
                     isCurrent
                       ? 'border-indigo-500/60 bg-indigo-500/10 text-white font-semibold shadow-xs'
                       : isPast
@@ -202,34 +213,71 @@ export const InvestigationView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left Column (7 cols): Remediation Console & Execution Terminal */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Subtabs: Action Steps / Terminal Output / Runbook */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xs">
-            <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
-              <div className="flex items-center gap-1">
+            <div className="px-3 py-2 border-b border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1 overflow-x-auto">
                 <button
                   onClick={() => setActiveConsoleTab('actions')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                     activeConsoleTab === 'actions'
                       ? 'bg-slate-800 text-white font-semibold'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  Remediation Actions
+                  Actions
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveConsoleTab('hypotheses');
+                    playActionBeep();
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeConsoleTab === 'hypotheses'
+                      ? 'bg-slate-800 text-white font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Hypotheses</span>
+                  {hypotheses.length > 0 && (
+                    <span className="bg-slate-800 text-slate-300 px-1 rounded text-[10px]">
+                      {hypotheses.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveConsoleTab('evidence');
+                    playActionBeep();
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeConsoleTab === 'evidence'
+                      ? 'bg-slate-800 text-white font-semibold'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Collected Evidence</span>
+                  {evidenceList.length > 0 && (
+                    <span className="bg-slate-800 text-slate-300 px-1 rounded text-[10px]">
+                      {evidenceList.length}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => setActiveConsoleTab('logs')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                     activeConsoleTab === 'logs'
                       ? 'bg-slate-800 text-white font-semibold'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <Terminal className="w-3 h-3 text-slate-400" />
-                  <span>Execution Logs</span>
+                  <Terminal className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Console Logs</span>
                 </button>
               </div>
 
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[10px] text-slate-400 hidden sm:inline">
                 {incident.recommendedActions.filter((a) => a.status === 'completed').length}/
                 {incident.recommendedActions.length} completed
               </span>
@@ -340,6 +388,164 @@ export const InvestigationView: React.FC = () => {
               </div>
             )}
 
+            {/* Content: Hypotheses Directory & Confirmation */}
+            {activeConsoleTab === 'hypotheses' && (
+              <div className="p-4 space-y-4">
+                <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-850 pb-2 mb-2">
+                  <span>Root-Cause Hypothesis List</span>
+                  <span>Only engineers may CONFIRM root cause</span>
+                </div>
+
+                <div className="space-y-3">
+                  {hypotheses.map((hyp) => {
+                    const isConfirmed = hyp.status === 'CONFIRMED';
+                    const isDiscounted = hyp.status === 'DISCOUNTED';
+                    const isConfirming = confirmingHypothesisId === hyp.id;
+
+                    return (
+                      <div
+                        key={hyp.id}
+                        className={`p-4 rounded-xl border transition-all space-y-3 ${
+                          isConfirmed
+                            ? 'border-emerald-500/50 bg-emerald-500/5 text-slate-200'
+                            : isDiscounted
+                            ? 'border-slate-800 bg-slate-950/40 text-slate-500 opacity-60'
+                            : 'border-slate-800 bg-slate-950 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-white">{hyp.title}</span>
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                isConfirmed ? 'bg-emerald-500/20 text-emerald-400' :
+                                isDiscounted ? 'bg-slate-800 text-slate-500' :
+                                hyp.confidence >= 80 ? 'bg-amber-500/15 text-amber-400' :
+                                'bg-slate-800 text-slate-400'
+                              }`}>
+                                {hyp.status} ({hyp.confidence}% Confidence)
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300">{hyp.description}</p>
+                          </div>
+
+                          {!isConfirmed && !isDiscounted && !isConfirming && (currentUser.role === 'support' || currentUser.role === 'admin') && (
+                            <button
+                              onClick={() => {
+                                setConfirmingHypothesisId(hyp.id);
+                                setEngineerNote('');
+                                playActionBeep();
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-750 text-[11px] font-medium text-slate-200 border border-slate-700 cursor-pointer"
+                            >
+                              Confirm Cause
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Connected Evidence List */}
+                        {(hyp.supportingEvidenceIds.length > 0 || hyp.contradictingEvidenceIds.length > 0) && (
+                          <div className="pt-2 border-t border-slate-800/80 flex flex-wrap gap-2 text-[10px]">
+                            {hyp.supportingEvidenceIds.map(evId => {
+                              const ev = evidenceList.find(e => e.id === evId);
+                              return ev ? (
+                                <span key={evId} className="text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 px-2 py-0.5 rounded">
+                                  Supporting: {ev.title}
+                                </span>
+                              ) : null;
+                            })}
+                            {hyp.contradictingEvidenceIds.map(evId => {
+                              const ev = evidenceList.find(e => e.id === evId);
+                              return ev ? (
+                                <span key={evId} className="text-rose-400 bg-rose-500/5 border border-rose-500/20 px-2 py-0.5 rounded">
+                                  Contradicting: {ev.title}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
+
+                        {/* Confirmation Details Note */}
+                        {isConfirmed && (
+                          <div className="bg-slate-900 border-l-2 border-l-emerald-500 p-2.5 rounded text-[11px] space-y-1">
+                            <div className="font-semibold text-emerald-400">Confirmed by {hyp.confirmedBy}</div>
+                            <p className="text-slate-300 italic">Note: "{hyp.engineerConfirmationNote}"</p>
+                          </div>
+                        )}
+
+                        {/* Confirming Note Dialog */}
+                        {isConfirming && (
+                          <div className="space-y-2.5 pt-2.5 border-t border-slate-800">
+                            <label className="block text-[11px] font-semibold text-slate-200">
+                              Write Confirmation Note (Explain why this hypothesis is verified):
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={engineerNote}
+                              onChange={(e) => setEngineerNote(e.target.value)}
+                              placeholder="e.g. Verified database Knex logs showing deadlock on Orders table. Connection metrics spiked exactly at peak checkout."
+                              className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-white outline-none focus:border-indigo-500"
+                            />
+                            <div className="flex justify-end gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingHypothesisId(null)}
+                                className="px-2.5 py-1 text-slate-400 hover:text-white cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmHypothesisSubmit(hyp.id)}
+                                disabled={!engineerNote.trim()}
+                                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded font-medium cursor-pointer"
+                              >
+                                Confirm Cause Note
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Content: Collected Telemetry Evidence */}
+            {activeConsoleTab === 'evidence' && (
+              <div className="p-4 space-y-3">
+                <div className="text-xs text-slate-400 border-b border-slate-850 pb-2 mb-2 flex items-center justify-between">
+                  <span>Structured Telemetry Metrics & Logs</span>
+                  <span>Total: {evidenceList.length} items</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5">
+                  {evidenceList.map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="p-3 bg-slate-950 border border-slate-850 hover:border-slate-800 rounded-lg text-xs space-y-1.5 transition-all"
+                    >
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                        <span className="text-indigo-400">{ev.type}</span>
+                        <span>{ev.timestamp}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-200">{ev.title}</span>
+                        <span className="font-mono text-slate-300 font-semibold bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
+                          {ev.value}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">{ev.details}</p>
+                      <div className="text-[10px] text-slate-500 font-mono text-right">
+                        Source: {ev.source}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Content: Execution Logs Terminal */}
             {activeConsoleTab === 'logs' && (
               <div className="p-4 bg-slate-950 font-mono text-xs text-slate-300 space-y-2 max-h-[420px] overflow-y-auto">
@@ -353,7 +559,7 @@ export const InvestigationView: React.FC = () => {
                   [00:00:03] Health check query: SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
                 </div>
                 <div className="text-amber-400 text-[11px]">
-                  [00:00:04] WARNING: Active connection count 98/100 threshold reached on payment_prod database.
+                  [00:00:04] WARNING: Active connection count 98/100 threshold reached on database.
                 </div>
                 {incident.recommendedActions
                   .filter((a) => a.executionResult)

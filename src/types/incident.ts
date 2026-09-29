@@ -80,6 +80,8 @@ export interface PostMortem {
   updatedAt: string;
 }
 
+export type MemoryStatus = 'DRAFT' | 'VERIFIED' | 'ARCHIVED';
+
 export interface AgentMemoryEntry {
   id: string;
   incidentId: string;
@@ -95,12 +97,49 @@ export interface AgentMemoryEntry {
   date: string;
   timesReferenced: number;
   lessonsLearned: string;
+  status?: MemoryStatus;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  sourceIncidentId?: string;
+  sourcePostMortemId?: string;
+  verificationNote?: string;
 }
 
 export interface IncidentAttachment {
   name: string;
   size: string;
   type: string;
+}
+
+export type EvidenceType = 'LOG' | 'METRIC' | 'DEPLOYMENT' | 'ALERT' | 'SERVICE_HEALTH' | 'HISTORICAL_INCIDENT';
+
+export interface EvidenceItem {
+  id: string;
+  type: EvidenceType;
+  timestamp: string;
+  service: string;
+  title: string;
+  value: string;
+  details: string;
+  source: string;
+}
+
+export type HypothesisStatus = 'OPEN' | 'LIKELY' | 'DISCOUNTED' | 'CONFIRMED';
+
+export interface RootCauseHypothesis {
+  id: string;
+  incidentId: string;
+  title: string;
+  description: string;
+  confidence: number;
+  status: HypothesisStatus;
+  supportingEvidenceIds: string[];
+  contradictingEvidenceIds: string[];
+  historicalIncidentIds: string[];
+  investigationStepIds: string[];
+  engineerConfirmationNote?: string;
+  confirmedBy?: string;
+  confirmedAt?: string;
 }
 
 export interface Incident {
@@ -136,6 +175,8 @@ export interface Incident {
   similarIncidentIds: string[];
   postMortem?: PostMortem;
   attachments?: IncidentAttachment[];
+  evidence?: EvidenceItem[];
+  hypotheses?: RootCauseHypothesis[];
 }
 
 export interface UserProfile {
