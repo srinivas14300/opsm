@@ -1,0 +1,8 @@
+{
+  "name": "Incident IQ",
+  "description": "An AI-powered incident intelligence workspace that remembers past incidents, suggests proven fixes, and guides fast resolutions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
